@@ -1,0 +1,49 @@
+@font-face {
+    font-family: "ZT Talk";
+    src: url("fonts/zt-talk/ZTTalk-Regular.woff2") format('woff');
+}
+
+@font-face {
+    font-family: "ZT Talk";
+    src: url("fonts/zt-talk/ZTTalk-Italic.woff2") format('woff');
+    font-style: italic;
+}
+
+@font-face {
+    font-family: "ZT Talk";
+    src: url("fonts/zt-talk/ZTTalk-Medium.woff2") format('woff');
+    font-weight: medium;
+}
+
+@font-face {
+    font-family: "ZT Talk";
+    src: url("fonts/zt-talk/ZTTalk-MediumItalic.woff2") format('woff');
+    font-weight: medium;
+    font-style: italic;
+}
+
+@font-face {
+    font-family: "ZT Talk";
+    src: url("fonts/zt-talk/ZTTalk-SemiBold.woff2") format('woff');
+    font-weight: 600;
+}
+
+@font-face {
+    font-family: "ZT Talk";
+    src: url("fonts/zt-talk/ZTTalk-SemiBoldItalic.woff2") format('woff');
+    font-weight: 600;
+    font-style: italic;
+}
+
+@font-face {
+    font-family: "ZT Talk";
+    src: url("fonts/zt-talk/ZTTalk-Bold.woff2") format('woff');
+    font-weight: bold;
+}
+
+@font-face {
+    font-family: "ZT Talk";
+    src: url("fonts/zt-talk/ZTTalk-BoldItalic.woff2") format('woff');
+    font-weight: bold;
+    font-style: italic;
+}
