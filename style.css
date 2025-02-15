@@ -1,5 +1,10 @@
 h1 {
-    font-family: "ZT Talk", monospace;
+    font-family: "Instrument Serif", serif;
+    font-size: 48px;
+}
+
+h2 {
+    font-size: 32px;
 }
 
 html, body {
@@ -7,10 +12,12 @@ html, body {
     padding: 0;
     align-items: center;
     justify-content: center;
+    background-color: #11002C;
+    color: #7047B3;
 }
 
 .pol {
-    color: #5311C0;
+    font-family: "ZT Talk", monospace;
 }
 
 .center {
@@ -18,6 +25,17 @@ html, body {
     align-items: center;
     justify-content: center;
     display: flex;
+}
+
+.right {
+    padding: 20px;
+    align-items: center;
+    justify-content: right;
+    display: flex;
+}
+
+.icon {
+    width: 50px;
 }
 
 footer {
