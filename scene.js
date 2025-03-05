@@ -7,6 +7,12 @@ class Scene {
     constructor() {
         this.container = document.getElementById('scene-container');
         this.loadingScreen = document.querySelector('.loading-screen');
+        this.portfolioContent = document.getElementById('portfolio-content');
+        this.mainContainer = document.querySelector('.main-container');
+        this.footer = document.querySelector('footer');
+        this.rightElements = document.querySelector('.right');
+        this.audioContext = null;
+        this.sounds = {};
         
         // Set up loading manager
         this.loadingManager = new THREE.LoadingManager(
@@ -29,6 +35,7 @@ class Scene {
         this.setupResizing();
         this.loadMacbook();
         this.setupDragAndDrop();
+        this.loadSounds();
         this.animate();
     }
 
@@ -311,6 +318,9 @@ class Scene {
                 
                 // Add the sticker as a child of the lid mesh
                 this.lidMesh.add(sticker);
+                
+                // Play sticker placement sounds
+                this.playSound('stickerPlace' + (Math.floor(4*Math.random())+1).toString());
             });
         }
     }
@@ -349,8 +359,12 @@ class Scene {
         revealButton.addEventListener('click', () => {
             if (!this.isLidOpen) {
                 this.toggleLid();
-                // Here you can add code to transition to the website
                 revealButton.style.display = 'none'; // Hide button after opening
+                
+                // Resume audio context if it was suspended (needed for Chrome)
+                if (this.audioContext && this.audioContext.state === 'suspended') {
+                    this.audioContext.resume();
+                }
             }
         });
 
@@ -368,6 +382,14 @@ class Scene {
         const startRotation = this.lidPivot.rotation.x;
         const targetRotation = this.isLidOpen ? Math.PI * 0.61 : 0; // Close to about 80% closed
 
+        // Play sound when opening
+        if (!this.isLidOpen) {
+            this.playSound('macbookOpen');
+            
+            // Fade out main content elements before starting the camera animation
+            this.fadeOutMainContent();
+        }
+
         const animateLid = (currentTime) => {
             const elapsed = currentTime - startTime;
             const progress = Math.min(elapsed / duration, 1);
@@ -383,19 +405,235 @@ class Scene {
             } else {
                 this.lidAnimationInProgress = false;
                 this.isLidOpen = !this.isLidOpen;
+                
+                // Trigger camera zoom when lid is fully opened
+                if (this.isLidOpen) {
+                    this.zoomToScreen();
+                }
             }
         };
 
         requestAnimationFrame(animateLid);
     }
+    
+    // Add a new method to fade out main content
+    fadeOutMainContent() {
+        // Apply transition styles to all elements that need to fade out
+        const elementsToFade = [
+            this.mainContainer.querySelector('h1'),
+            document.querySelector('.sticker-palette'),
+            this.footer,
+            this.rightElements
+        ];
+
+        // Apply fade out effect
+        elementsToFade.forEach(element => {
+            if (element) {
+                element.style.transition = 'opacity 0.8s ease';
+                element.style.opacity = '0';
+            }
+        });
+    }
+    
+    zoomToScreen() {
+        // First, analyze the screen geometry to get precise measurements
+        if (!this.lidMesh) return;
+        
+        // Create a box that represents the screen dimensions
+        let screenBounds = new THREE.Box3();
+        let screenCenter = new THREE.Vector3();
+        let screenWidth = 0;
+        let screenHeight = 0;
+        
+        // Find the screen dimensions by analyzing the lid mesh
+        if (this.lidMesh.geometry) {
+            screenBounds.setFromObject(this.lidMesh);
+            screenBounds.getCenter(screenCenter);
+            
+            // Get the dimensions of the screen
+            const size = new THREE.Vector3();
+            screenBounds.getSize(size);
+            screenWidth = size.x * 0.85;
+            screenHeight = size.z * 0.85;
+        }
+        
+        // Calculate the ideal screen position
+        const screenPosition = screenCenter.clone();
+        
+        // Narrower FOV for better focus
+        const targetFOV = 25;
+        
+        // Calculate the optimal distance
+        const distance = (screenHeight / 2) / Math.tan(THREE.MathUtils.degToRad(targetFOV / 2));
+        
+        // Starting position is the current camera position
+        const startPosition = this.camera.position.clone();
+        
+        // Target position with higher elevation for more natural viewing angle
+        const targetPosition = screenCenter.clone().add(
+            new THREE.Vector3(0, 0.25, distance * 0.85)
+        );
+        
+        // Starting and target points for the camera to look at
+        const startLookAt = new THREE.Vector3(0, 0, 0);
+        // Look at a higher point on the screen
+        const targetLookAt = screenCenter.clone().add(new THREE.Vector3(0, 0.1, 0));
+        
+        // Animation parameters
+        const duration = 2000;
+        const startTime = performance.now();
+        
+        // Store the current camera field of view
+        const startFOV = this.camera.fov;
+        
+        // Create a smooth curve that emphasizes upward movement early
+        // but avoids discontinuities that cause "jumps" in the animation
+        const smoothEasing = t => {
+            // Combination of ease-out-cubic for the first part and ease-in-out for the latter part
+            // This creates a smooth acceleration at the start with emphasis on upward movement
+            return t < 0.5 
+                ? 4 * t * t * t 
+                : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        };
+        
+        // Store intermediate values to ensure smooth transitions
+        let lastLookAt = startLookAt.clone();
+        
+        // Animate the camera movement
+        const zoomAnimation = (currentTime) => {
+            const elapsed = currentTime - startTime;
+            let progress = Math.min(elapsed / duration, 1);
+            
+            // Apply smooth easing
+            const easeProgress = smoothEasing(progress);
+            
+            // Update camera position with easing
+            this.camera.position.lerpVectors(startPosition, targetPosition, easeProgress);
+            
+            // Calculate the current look-at point using the same easing function
+            // This ensures position and rotation change at the same rate
+            const currentLookAt = new THREE.Vector3();
+            currentLookAt.lerpVectors(startLookAt, targetLookAt, easeProgress);
+            
+            // Apply the look-at smoothly
+            this.camera.lookAt(currentLookAt);
+            
+            // Update FOV
+            this.camera.fov = startFOV + (targetFOV - startFOV) * easeProgress;
+            this.camera.updateProjectionMatrix();
+            
+            if (progress < 1) {
+                requestAnimationFrame(zoomAnimation);
+            } else {
+                setTimeout(() => {
+                    this.revealPortfolioContent();
+                }, 300);
+            }
+        };
+        
+        requestAnimationFrame(zoomAnimation);
+    }
+
+    revealPortfolioContent() {
+        // Fade out 3D scene almost completely for a better transition
+        this.container.style.transition = 'opacity 0.8s ease';
+        this.container.style.opacity = '0.1'; // More transparent than before
+        
+        // Reveal portfolio content if it exists
+        if (this.portfolioContent) {
+            this.portfolioContent.style.display = 'block';
+            this.portfolioContent.style.opacity = '0';
+            this.portfolioContent.style.transition = 'opacity 0.8s ease';
+            
+            // Trigger reflow to ensure transition happens
+            this.portfolioContent.offsetHeight;
+            
+            this.portfolioContent.style.opacity = '1';
+        } else {
+            console.warn('Portfolio content element not found. Create one with id="portfolio-content"');
+        }
+    }
+
+    loadSounds() {
+        try {
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Load MacBook opening sound
+            fetch('sounds/macbook-open.mp3')
+                .then(response => response.arrayBuffer())
+                .then(arrayBuffer => this.audioContext.decodeAudioData(arrayBuffer))
+                .then(audioBuffer => {
+                    this.sounds.macbookOpen = audioBuffer;
+                })
+                .catch(error => console.error('Error loading sound:', error));
+                
+            // Load sticker placement sound1
+            fetch('sounds/blip.wav')
+                .then(response => response.arrayBuffer())
+                .then(arrayBuffer => this.audioContext.decodeAudioData(arrayBuffer))
+                .then(audioBuffer => {
+                    this.sounds.stickerPlace1 = audioBuffer;
+                })
+                .catch(error => console.error('Error loading sound:', error));
+
+            // Load sticker placement sound2
+            fetch('sounds/bup.wav')
+                .then(response => response.arrayBuffer())
+                .then(arrayBuffer => this.audioContext.decodeAudioData(arrayBuffer))
+                .then(audioBuffer => {
+                    this.sounds.stickerPlace2 = audioBuffer;
+                })
+                .catch(error => console.error('Error loading sound:', error));
+
+            // Load sticker placement sound3
+            fetch('sounds/bwoop.wav')
+                .then(response => response.arrayBuffer())
+                .then(arrayBuffer => this.audioContext.decodeAudioData(arrayBuffer))
+                .then(audioBuffer => {
+                    this.sounds.stickerPlace3 = audioBuffer;
+                })
+                .catch(error => console.error('Error loading sound:', error));
+
+            // Load sticker placement sound4
+            fetch('sounds/lip.wav')
+                .then(response => response.arrayBuffer())
+                .then(arrayBuffer => this.audioContext.decodeAudioData(arrayBuffer))
+                .then(audioBuffer => {
+                    this.sounds.stickerPlace4 = audioBuffer;
+                })
+                .catch(error => console.error('Error loading sound:', error));
+            
+        } catch (e) {
+            console.warn('Web Audio API not supported in this browser');
+        }
+    }
+    
+    playSound(soundName) {
+        if (!this.audioContext || !this.sounds[soundName]) return;
+        
+        const source = this.audioContext.createBufferSource();
+        source.buffer = this.sounds[soundName];
+        source.connect(this.audioContext.destination);
+        source.start(0);
+    }
 
     animate() {
         requestAnimationFrame(this.animate.bind(this));
-        this.renderer.render(this.scene, this.camera);
+        
+        // Only render when needed to improve performance
+        if (this.lidAnimationInProgress || this.isLidOpen) {
+            this.renderer.render(this.scene, this.camera);
+        } else {
+            // Render at a lower frequency when static
+            if (!this.lastRenderTime || performance.now() - this.lastRenderTime > 500) {
+                this.renderer.render(this.scene, this.camera);
+                this.lastRenderTime = performance.now();
+            }
+        }
     }
 }
 
 // Create the scene when the page loads
 window.addEventListener('load', () => {
     new Scene();
-}); 
+});
